@@ -1,17 +1,59 @@
 # hit-exo-humenv
 
-Minimal HumEnv + mjlab learning scaffold for walking with an abstract exoskeleton.
+面向外骨骼机器人虚拟助力研究的 HumEnv + mjlab 实验工程。当前工程已经实现了：
 
-Initial scope:
+- **平地多速度前向行走**：速度覆盖 `0.5、0.75、1.0、1.25、1.5 m/s`。
+- **冻结 MetaMotivo S-1 人体控制器**：人体动作由 S-1 产生，外骨骼策略只学习助力。
+- **抽象双膝外骨骼助力**：在 `L_Knee_x` 和 `R_Knee_x` 两个自由度施加额外力矩。
+- **mjlab/RSL-RL 训练闭环**：支持并行环境训练、查看器回放、无头评估和报告生成。
+- **下肢代谢功率 proxy 评估**：统计髋、膝、踝关节功率，抵消仿真稳定用被动力后计算代谢 proxy。
+- **mocap 跟踪与楼梯探索**：已有 AMASS/mocap 跟踪、上下楼地形、S-1 楼梯补偿等实验脚本和调试结果。
 
-- activity mode: walking only
-- exoskeleton model: no rigid exo body, only extra torques at `L_Knee_x` and `R_Knee_x`
-- baseline environment: Gymnasium/HumEnv wrapper
-- mjlab integration: task registration/config scaffold for manager-based training
+## 当前结论
 
-## Environment
+`./train_latent_z.sh` 已经跑通 **平地不同行走速度下的双膝助力训练**。本地已有无头对比评估显示，训练后的膝助力策略相对零助力基线可以降低人体下肢代谢功率 proxy。
 
-Use the existing mjlab conda environment:
+| 评估时间 | 人体下肢代谢 proxy 降低 | 人体下肢机械绝对功率降低 | 外骨骼双膝绝对功率 | 助力效率 |
+| --- | ---: | ---: | ---: | ---: |
+| 2026-05-19 21:22 | 24.35% | 24.54%（人机合计下肢绝对功率） | 71.44 W | 5.631 W/W |
+| 2026-05-19 22:08 | 28.76% | 26.48% | 68.13 W | 6.953 W/W |
+| 2026-05-20 12:45 | 25.73% | 21.25% | 58.24 W | 2.608 W/W |
+| 2026-05-20 13:02 | 27.39% | 23.17% | 71.29 W | 3.208 W/W |
+
+说明：
+
+- 这里的“人体下肢代谢 proxy”不是肌骨模型代谢值，而是关节机械功率近似：`正功率 / 0.25 + 负功率幅值 / 1.20`。
+- 统计范围是髋、膝、踝下肢关节。
+- 当前外骨骼不是刚体模型，只是双膝额外广义力矩。
+- 评估报告由 `./eval.sh` 生成，原始日志和模型 checkpoint 没有提交到 Git 仓库。
+
+## 当前能力边界
+
+已经比较稳定的部分：
+
+- 平地前向多速度行走助力训练。
+- 冻结 S-1 人体控制 + 2 维膝助力策略。
+- 零助力基线与训练助力策略的无头对比评估。
+- 下肢功率、外骨骼功率、助力效率报告。
+- AMASS walking 数据处理说明和 mocap tracking 训练入口。
+
+正在探索的部分：
+
+- 上下楼 mocap 跟踪。
+- S-1 楼梯补偿策略。
+- 膝助力叠加楼梯补偿策略。
+- Kimodo/G1/SMPLX 伪 mocap 与脚部支撑约束生成。
+
+尚未完成的部分：
+
+- 跑步、转弯、多方向行走的系统训练。
+- 斜坡、崎岖地形的正式训练和评估。
+- 真实外骨骼刚体、质量、绑缚、人机接触模型。
+- OpenSim/AnyBody 级别的肌肉力、肌肉激活和真实代谢分析。
+
+## 快速使用
+
+使用现有 `mjwarp_env` 环境：
 
 ```bash
 conda activate mjwarp_env
@@ -20,125 +62,164 @@ pip install -e /home/yhzhu/mjlab
 pip install -e /home/yhzhu/myWorks_vips/hit_exo_humenv
 ```
 
-The current tested environment uses editable `mjlab==1.3.0` from
-`/home/yhzhu/mjlab`, with `mujoco==3.8.1`, `mujoco-warp==3.8.1`, and
-`rsl-rl-lib==5.2.0`.
+当前测试过的环境包括：
 
-`config/latent_z.json` is the source of truth for latent-z task defaults: task
-id, log roots, speed commands, S-1 sampling, exo torque limit, simulation step,
-and the metabolic power coefficients used by reward/eval scripts.
+- `/home/yhzhu/mjlab` 的可编辑安装版 `mjlab==1.3.0`
+- `mujoco==3.8.1`
+- `mujoco-warp==3.8.1`
+- `rsl-rl-lib==5.2.0`
 
-The mjlab training config defaults to the values in `config/latent_z.json`
-(`4096` parallel environments and a 30 Hz control step implemented as 3 MuJoCo
-substeps at 90 Hz). Override these from the CLI if you need a finer simulation:
-
-```bash
-./train_latent_z.sh --env.scene.num-envs 64 --env.sim.mujoco.timestep 0.0022222222222222222 --env.decimation 15
-```
-
-## Smoke Test
-
-```bash
-./run_latent_z.sh
-```
-
-`run_latent_z.sh` loads the newest local RSL-RL checkpoint from
-`logs/rsl_rl/humenv_knee_exo_walking` and starts native MuJoCo viewer play.
-It also writes the actual left/right knee PD torque to
-`logs/run/knee_pd_torque/<timestamp>...csv` while the viewer is running.
-
-## mjlab Task
-
-The package registers:
-
-```text
-Mjlab-HumEnv-KneeExo-Walking
-```
-
-List tasks after editable install:
-
-```bash
-python -m mjlab.scripts.list_envs knee
-```
-
-Train through mjlab/RSL-RL:
+## 训练平地多速度膝助力
 
 ```bash
 ./train_latent_z.sh
 ```
 
-Train the exoskeleton policy with frozen S-1 human control and mocap gait
-tracking rewards:
+该脚本训练任务：
 
-```bash
-./train_mocap_track.sh
+```text
+Mjlab-HumEnv-KneeExo-Walking
 ```
 
-Run the newest mocap-track checkpoint in the viewer:
+训练逻辑：
+
+- 每个 episode 重置时采样一个前向速度。
+- 速度来自 `config/latent_z.json` 中的 `walking_command.speed_choices`。
+- 目前方向只有 `0.0 deg`，即前向行走。
+- S-1 根据速度选择对应 latent，例如 `move-ego-0-1.25`。
+- 外骨骼策略只输出左右膝两个助力动作。
+
+默认训练配置：
+
+- 并行环境数：`4096`
+- 控制频率：约 `30 Hz`
+- MuJoCo 子步：`3`
+- 最大膝助力力矩：`25 Nm`
+
+小规模调试训练示例：
 
 ```bash
-./run_mocap_track.sh
+./train_latent_z.sh --env.scene.num-envs 64 --agent.max-iterations 10
 ```
 
-This keeps MetaMotivo S-1 fixed. The mocap reference is used to infer an S-1
-tracking latent sequence, while the learned part is still just the
-two-dimensional exoskeleton action. Override the reference motion with
-`MOCAP_MOTION=/path/to/walk.hdf5 MOCAP_EPISODE=ep_0 ./train_mocap_track.sh`.
-Unlike `train_latent_z.sh`, the mocap-track entrypoint removes speed-command observations.
-The mocap file is treated as one fixed reference
-clip. Frozen S-1 tracks the mocap `observation` sequence with MetaMotivo's
-tracking inference; the exoskeleton policy still learns only the residual
-knee-assist action.
-The default exoskeleton limit is intentionally conservative (`25Nm`) so the
-policy learns residual assistance without overpowering the frozen S-1 gait.
-Use the same `MOCAP_MOTION` and `MOCAP_EPISODE` values with
-`./run_mocap_track.sh` to replay the matching fixed-reference setup.
-
-`train_latent_z.sh` samples the human walking command at episode reset and keeps
-that command fixed until the next timeout or fall reset. The command currently
-samples forward speeds from `0.5, 0.75, 1.0, 1.25, 1.5` m/s and only forward
-direction `0` degrees, then selects the corresponding S-1 human task latent,
-e.g. `move-ego-0-1.25`; it is not a velocity-tracking reward for the
-exoskeleton policy.
-
-Summarize TensorBoard scalars from all local runs:
+## 回放最新策略
 
 ```bash
-conda run --no-capture-output -n mjwarp_env python scripts/summarize_mjlab_training.py --output-file logs/eval/training_summary.json
+./run_latent_z.sh
 ```
 
-Evaluate the newest checkpoint against a zero-assist baseline without a viewer.
-This writes the baseline and assisted rollout CSVs, an `assist_power.json`, and
-a concise Chinese `report.md` under
-`logs/eval/latent_z_power/<timestamp>_headless_compare`:
+固定速度回放示例：
+
+```bash
+RANDOM_WALK_SPEED=0 WALK_SPEED=1.25 RANDOM_WALK_DIRECTION=0 WALK_DIRECTION=0 ./run_latent_z.sh
+```
+
+## 无头评估并生成报告
 
 ```bash
 ./eval.sh --num-envs 64 --steps 300
 ```
 
-`run_latent_z.sh` uses the same random forward-speed command distribution as
-training by default. For a fixed play command, use
-`RANDOM_WALK_SPEED=0 WALK_SPEED=1.25 RANDOM_WALK_DIRECTION=0 WALK_DIRECTION=0 ./run_latent_z.sh`.
-Play mode lays out parallel environments on a square-ish grid with
-`ENV_SPACING=3.0` meters by default. Override it with
-`ENV_SPACING=... ./run_latent_z.sh` or pass `./run_latent_z.sh --env-spacing ...`.
-`run_latent_z.sh` keeps S-1 unmodified by default: `S1_LATENT_SPEED_SCALE=1.0`,
-`HUMAN_ACTION_REPEAT=1`, `HUMAN_ACTION_SMOOTHING=0.0`, and
-`HUMAN_ROOT_HEIGHT=0.94`.
+该命令会依次运行：
 
-The mjlab task is intentionally thin at this stage: it keeps the same walking-only,
-knee-torque abstraction while making the config visible to mjlab/RSL-RL.
+- 零助力基线 rollout。
+- 最新训练 checkpoint 的助力 rollout。
+- 助力功率分析。
+- 中文 Markdown 报告生成。
 
-## Control Contract
+输出目录：
 
-The exoskeleton policy owns only the two knee-assist actions. The human controller
-is a frozen base controller: either zero torque for smoke tests, or MetaMotivo S-1
-for walking rollouts. S-1 is installed from `/home/yhzhu/AI/metamotivo` and loaded
-with `local_files_only=True` from the local HuggingFace cache. The assist torque is
-applied as feed-forward generalized force on `L_Knee_x` and `R_Knee_x`. The
-training reward minimizes a lower-limb hip+knee+ankle metabolic proxy after
-canceling XML passive joint forces used for simulation stability:
-`positive_joint_power / 0.25 + negative_joint_power_magnitude / 1.20`, plus
-joint-velocity fluctuation and fall penalties. Eval reports the same passive-adjusted
-lower-limb metabolic proxy and also logs total actuator power for diagnostics, while
-older knee-only logs are treated as legacy fallback input.
+```text
+logs/eval/latent_z_power/<时间戳>_headless_compare/
+```
+
+## mocap 跟踪训练
+
+```bash
+./train_mocap_track.sh
+```
+
+该模式使用固定 mocap 参考片段推断 S-1 tracking latent，外骨骼策略仍然只学习左右膝助力。可以通过环境变量替换参考动作：
+
+```bash
+MOCAP_MOTION=/path/to/walk.hdf5 MOCAP_EPISODE=ep_0 ./train_mocap_track.sh
+```
+
+回放 mocap tracking checkpoint：
+
+```bash
+./run_mocap_track.sh
+```
+
+## 上下楼探索脚本
+
+当前仓库保留了上下楼方向的实验入口：
+
+```bash
+./train_mocap_track_updown_stairs.sh
+./train_stair_compensation_updown_stairs.sh
+./train_knee_exo_updown_stairs_on_compensation.sh
+./show_mocap_track_updown_stairs.sh
+```
+
+这些脚本已经用于本地探索楼梯地形、脚部落点跟踪和 S-1 残差补偿，但还不应视为已经完成的稳定上下楼助力方案。
+
+## AMASS walking 数据准备
+
+详细说明见 [docs_amass_walking_data.md](docs_amass_walking_data.md)。
+
+推荐先下载：
+
+- `KIT`
+- `CMU`
+- `BMLmovi`
+- `BMLrub`
+- `MPI_HDM05`
+- `Transitions`
+
+处理入口：
+
+```bash
+conda run --no-capture-output -n mjwarp_env python scripts/amass_walking_pipeline.py check
+conda run --no-capture-output -n mjwarp_env python scripts/amass_walking_pipeline.py extract
+conda run --no-capture-output -n mjwarp_env python scripts/amass_walking_pipeline.py select
+conda run --no-capture-output -n mjwarp_env python scripts/amass_walking_pipeline.py process --num-workers 0
+conda run --no-capture-output -n mjwarp_env python scripts/amass_walking_pipeline.py validate
+```
+
+## 核心文件
+
+| 文件 | 作用 |
+| --- | --- |
+| `config/latent_z.json` | 平地 latent-z 任务、训练、评估、奖励和仿真参数 |
+| `hit_exo_humenv/envs/humenv_knee_exo.py` | Gymnasium/HumEnv 抽象膝助力环境 |
+| `hit_exo_humenv/mjlab/walking_env_cfg.py` | mjlab 任务和 PPO 配置 |
+| `hit_exo_humenv/mjlab/actions.py` | S-1 人体动作、膝助力动作、残差补偿动作 |
+| `hit_exo_humenv/mjlab/mdp.py` | 奖励、终止、下肢功率和 mocap tracking 指标 |
+| `hit_exo_humenv/s1_policy.py` | MetaMotivo S-1 包装和 latent 缓存 |
+| `scripts/eval_latent_z_power.py` | 无头 rollout 和功率日志 |
+| `scripts/analyze_assist_power.py` | 助力前后对比分析 |
+| `scripts/write_latent_z_power_report.py` | 中文评估报告生成 |
+
+## 测试
+
+```bash
+conda run --no-capture-output -n mjwarp_env pytest -q tests
+```
+
+当前提交前验证结果：
+
+```text
+34 passed
+```
+
+## 版本控制说明
+
+仓库只提交源码、配置、脚本、文档和测试。以下内容默认不进入 Git：
+
+- AMASS 原始压缩包。
+- HDF5/NPZ/PT checkpoint 等大文件。
+- `logs/` 训练和评估日志。
+- `.omx/` 本地实验状态、生成地形和调试产物。
+- `.cache/` 本地缓存。
+
