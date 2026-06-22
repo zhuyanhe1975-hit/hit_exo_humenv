@@ -133,6 +133,41 @@ RANDOM_WALK_SPEED=0 WALK_SPEED=1.25 RANDOM_WALK_DIRECTION=0 WALK_DIRECTION=0 ./r
 logs/eval/latent_z_power/<时间戳>_headless_compare/
 ```
 
+## 训练-评估扫参
+
+如果目标是用尽量少的总时间得到满足要求的网络，不建议只盯每步仿真速度或最终训练 reward。当前工程提供了一个小规模闭环扫参入口：
+
+```bash
+./train_eval_sweep.sh --preset smoke --max-iterations 50
+```
+
+它会自动执行：
+
+- 为候选配置做短训练。
+- 对零助力 baseline 和训练 checkpoint 做同条件无头评估。
+- 计算人体下肢代谢功率 proxy 节省比例、助力效率、人机总输入变化和跌倒数。
+- 生成 `summary.csv`、`summary.json` 和中文 `report.md`。
+- 某个候选达到目标后默认提前停止。
+
+先查看计划而不启动训练：
+
+```bash
+./train_eval_sweep.sh --dry-run
+```
+
+默认达标条件：
+
+- 人体下肢代谢功率 proxy 节省比例 `>= 20%`
+- 助力效率 `>= 1.0 W/W`
+- 人机分开计总输入不增加
+- 评估 rollout 中无跌倒
+
+输出目录：
+
+```text
+logs/eval/train_eval_sweep/<时间戳>/
+```
+
 ## mocap 跟踪训练
 
 ```bash
@@ -200,6 +235,7 @@ conda run --no-capture-output -n mjwarp_env python scripts/amass_walking_pipelin
 | `scripts/eval_latent_z_power.py` | 无头 rollout 和功率日志 |
 | `scripts/analyze_assist_power.py` | 助力前后对比分析 |
 | `scripts/write_latent_z_power_report.py` | 中文评估报告生成 |
+| `scripts/train_eval_sweep.py` | 短训练、功率评估、达标判定和候选排序 |
 
 ## 测试
 
@@ -210,7 +246,7 @@ conda run --no-capture-output -n mjwarp_env pytest -q tests
 当前提交前验证结果：
 
 ```text
-34 passed
+36 passed
 ```
 
 ## 版本控制说明
@@ -222,4 +258,3 @@ conda run --no-capture-output -n mjwarp_env pytest -q tests
 - `logs/` 训练和评估日志。
 - `.omx/` 本地实验状态、生成地形和调试产物。
 - `.cache/` 本地缓存。
-

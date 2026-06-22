@@ -101,6 +101,9 @@ def humenv_knee_exo_walking_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
             direction_bins_deg=TRAIN_WALKING_DIRECTION_CHOICES_DEG,
             num_samples_per_inference=cfg_path("human_s1", "num_samples_per_inference"),
             max_workers=cfg_path("human_s1", "max_workers"),
+            latent_speed_scale=cfg_path("human_s1", "latent_speed_scale"),
+            action_repeat=cfg_path("human_s1", "action_repeat"),
+            action_smoothing=cfg_path("human_s1", "action_smoothing"),
         ),
         "knee_exo": KneeExoTorqueActionCfg(
             entity_name="robot",

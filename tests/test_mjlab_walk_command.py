@@ -189,6 +189,9 @@ def test_latent_z_walking_samples_only_forward_speeds() -> None:
     assert human_cfg.speed_bins == command_cfg.speed_choices
     assert command_cfg.direction_choices_deg == tuple(cfg_path("walking_command", "direction_choices_deg"))
     assert human_cfg.direction_bins_deg == tuple(cfg_path("walking_command", "direction_choices_deg"))
+    assert human_cfg.latent_speed_scale == cfg_path("human_s1", "latent_speed_scale")
+    assert human_cfg.action_repeat == cfg_path("human_s1", "action_repeat")
+    assert human_cfg.action_smoothing == cfg_path("human_s1", "action_smoothing")
 
 
 def test_play_cfg_is_not_training_episode_length() -> None:
