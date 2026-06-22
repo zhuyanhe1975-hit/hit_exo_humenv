@@ -17,6 +17,7 @@ from hit_exo_humenv.latent_z_config import cfg_path
 @dataclass(frozen=True)
 class Candidate:
     name: str
+    exo_joint_group: str
     power_weight: float
     smoothness_weight: float
     entropy_coef: float
@@ -37,6 +38,7 @@ def default_candidates(preset: str) -> list[Candidate]:
     smoke = [
         Candidate(
             name="smoke_balanced",
+            exo_joint_group="knee",
             power_weight=-0.001,
             smoothness_weight=-0.02,
             entropy_coef=0.005,
@@ -47,9 +49,25 @@ def default_candidates(preset: str) -> list[Candidate]:
     ]
     if preset == "smoke":
         return smoke
+    assist_group_candidates = [
+        Candidate(
+            name=f"{group}_balanced",
+            exo_joint_group=group,
+            power_weight=-0.001,
+            smoothness_weight=-0.02,
+            entropy_coef=0.005,
+            init_std=0.8,
+            action_repeat=1,
+            num_steps_per_env=16,
+        )
+        for group in ("knee", "hip", "ankle", "lower_limb")
+    ]
+    if preset == "assist-groups":
+        return assist_group_candidates
     return [
         Candidate(
             name="balanced",
+            exo_joint_group="knee",
             power_weight=-0.001,
             smoothness_weight=-0.02,
             entropy_coef=0.005,
@@ -59,6 +77,7 @@ def default_candidates(preset: str) -> list[Candidate]:
         ),
         Candidate(
             name="power_focus",
+            exo_joint_group="knee",
             power_weight=-0.002,
             smoothness_weight=-0.01,
             entropy_coef=0.003,
@@ -68,6 +87,7 @@ def default_candidates(preset: str) -> list[Candidate]:
         ),
         Candidate(
             name="smooth_light",
+            exo_joint_group="knee",
             power_weight=-0.0015,
             smoothness_weight=-0.005,
             entropy_coef=0.003,
@@ -77,6 +97,7 @@ def default_candidates(preset: str) -> list[Candidate]:
         ),
         Candidate(
             name="s1_repeat2",
+            exo_joint_group="knee",
             power_weight=-0.0015,
             smoothness_weight=-0.01,
             entropy_coef=0.003,
@@ -130,7 +151,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Train short latent-z assist candidates, evaluate power metrics, and rank by convergence outcome."
     )
-    parser.add_argument("--preset", choices=("default", "smoke"), default="default")
+    parser.add_argument("--preset", choices=("default", "smoke", "assist-groups"), default="default")
     parser.add_argument("--output-root", type=Path, default=Path("logs/eval/train_eval_sweep"))
     parser.add_argument("--log-root", type=Path, default=Path("logs/rsl_rl_sweep"))
     parser.add_argument("--num-envs", type=int, default=cfg_path("train", "num_envs"))
@@ -208,8 +229,9 @@ def main() -> None:
             args=args,
             checkpoint_file=checkpoint,
             action_repeat=candidate.action_repeat,
+            exo_joint_group=candidate.exo_joint_group,
         )
-        baseline_csv = _baseline_csv(args, run_dir, candidate.action_repeat)
+        baseline_csv = _baseline_csv(args, run_dir, candidate)
         _run_analyze(baseline_csv, assisted_csv, analysis_json)
         _run_report(analysis_json, report_md)
         row = _summary_row(candidate, train_log_dir, checkpoint, assisted_csv, analysis_json)
@@ -233,14 +255,14 @@ def main() -> None:
     print(f"[INFO] sweep report: {run_dir / 'report.md'}")
 
 
-def _baseline_csv(args: argparse.Namespace, run_dir: Path, action_repeat: int) -> Path:
+def _baseline_csv(args: argparse.Namespace, run_dir: Path, candidate: Candidate) -> Path:
     if args.skip_baseline:
         if args.baseline_csv is None:
             raise ValueError("--skip-baseline requires --baseline-csv")
         return args.baseline_csv
     if args.baseline_csv is not None:
         return args.baseline_csv
-    output_csv = run_dir / f"baseline_zero_s1_repeat{action_repeat}.csv"
+    output_csv = run_dir / f"baseline_zero_{candidate.exo_joint_group}_s1_repeat{candidate.action_repeat}.csv"
     if output_csv.exists():
         return output_csv
     _run_eval(
@@ -248,19 +270,23 @@ def _baseline_csv(args: argparse.Namespace, run_dir: Path, action_repeat: int) -
         output_csv=output_csv,
         args=args,
         checkpoint_file=None,
-        action_repeat=action_repeat,
+        action_repeat=candidate.action_repeat,
+        exo_joint_group=candidate.exo_joint_group,
     )
     return output_csv
 
 
 def _train_candidate(candidate: Candidate, args: argparse.Namespace) -> Path:
     import hit_exo_humenv.mjlab  # noqa: F401
+    from hit_exo_humenv.mjlab.walking_env_cfg import exo_joint_names, exo_torque_limits
     from mjlab.scripts.train import TrainConfig, launch_training
 
     cfg = TrainConfig.from_task(cfg_path("task_id"))
     cfg = replace(cfg, log_root=str(args.log_root), gpu_ids=_gpu_ids(args.gpu_ids))
     cfg.env.scene.num_envs = args.num_envs
     cfg.env.actions["human_s1"].action_repeat = candidate.action_repeat
+    cfg.env.actions["knee_exo"].joint_names = exo_joint_names(candidate.exo_joint_group)
+    cfg.env.actions["knee_exo"].max_torque = exo_torque_limits(candidate.exo_joint_group)
     cfg.env.rewards["lower_limb_joint_power_cost"].weight = candidate.power_weight
     cfg.env.rewards["lower_limb_joint_velocity_delta_l2"].weight = candidate.smoothness_weight
     cfg.agent.run_name = candidate.name
@@ -281,6 +307,7 @@ def _run_eval(
     args: argparse.Namespace,
     checkpoint_file: Path | None,
     action_repeat: int,
+    exo_joint_group: str,
 ) -> None:
     cmd = [
         sys.executable,
@@ -297,6 +324,8 @@ def _run_eval(
         str(args.seed),
         "--human-action-repeat",
         str(action_repeat),
+        "--exo-joint-group",
+        exo_joint_group,
     ]
     if checkpoint_file is not None:
         cmd.extend(["--checkpoint-file", str(checkpoint_file)])
@@ -344,6 +373,7 @@ def _summary_row(
     rollout_summary = json.loads(summary_path.read_text()) if summary_path.exists() else {}
     return {
         "candidate": candidate.name,
+        "exo_joint_group": candidate.exo_joint_group,
         "power_weight": candidate.power_weight,
         "smoothness_weight": candidate.smoothness_weight,
         "entropy_coef": candidate.entropy_coef,
@@ -380,14 +410,15 @@ def _write_summary(run_dir: Path, ranked: list[dict[str, object]], target: Targe
         f"目标：节省 >= {target.min_saved_percent:.1f}%，助力效率 >= {target.min_efficiency:.2f} W/W，"
         f"人机总输入变化 <= {target.max_net_input_change_percent:.1f}%，跌倒数 <= {target.max_total_fallen}。",
         "",
-        "| 排名 | 候选 | 达标 | 节省比例 | 助力效率 | 人机总输入变化 | 跌倒数 | checkpoint |",
-        "|---:|---|---|---:|---:|---:|---:|---|",
+        "| 排名 | 候选 | 助力组 | 达标 | 节省比例 | 助力效率 | 人机总输入变化 | 跌倒数 | checkpoint |",
+        "|---:|---|---|---|---:|---:|---:|---:|---|",
     ]
     for row in ranked:
         lines.append(
-            "| {rank} | {candidate} | {passed} | {saved:.2f}% | {eff:.3f} | {net:.2f}% | {fallen} | `{checkpoint}` |".format(
+            "| {rank} | {candidate} | {group} | {passed} | {saved:.2f}% | {eff:.3f} | {net:.2f}% | {fallen} | `{checkpoint}` |".format(
                 rank=row["rank"],
                 candidate=row["candidate"],
+                group=row["exo_joint_group"],
                 passed="是" if row["passed_target"] else "否",
                 saved=_float_or_nan(row["human_abs_power_saved_percent"]),
                 eff=_float_or_nan(row["assist_efficiency_human_saved_per_exo_abs_power"]),

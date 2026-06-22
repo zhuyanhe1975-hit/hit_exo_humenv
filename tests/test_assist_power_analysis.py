@@ -137,6 +137,8 @@ def test_assist_power_summary_prefers_lower_limb_fields(tmp_path) -> None:
                 "human_lower_limb_signed_power_w": 80.0,
                 "combined_lower_limb_abs_power_w": 110.0,
                 "combined_lower_limb_signed_power_w": 85.0,
+                "exo_lower_limb_abs_power_w": 30.0,
+                "exo_lower_limb_signed_power_w": 6.0,
                 "human_knee_abs_power_w": 10.0,
                 "human_knee_signed_power_w": 8.0,
                 "combined_knee_abs_power_w": 11.0,
@@ -153,7 +155,7 @@ def test_assist_power_summary_prefers_lower_limb_fields(tmp_path) -> None:
 
     assert summary.human_knee_abs_power_mean_w == 100.0
     assert summary.combined_knee_abs_power_mean_w == 110.0
-    assert summary.exo_knee_abs_power_mean_w == 20.0
+    assert summary.exo_knee_abs_power_mean_w == 30.0
     assert summary.human_lower_limb_mechanical_abs_power_mean_w == 100.0
     assert summary.human_lower_limb_metabolic_proxy_mean_w is None
 
@@ -173,6 +175,8 @@ def test_assist_power_summary_prefers_metabolic_fields(tmp_path) -> None:
                 "human_lower_limb_signed_power_w": 40.0,
                 "combined_lower_limb_abs_power_w": 110.0,
                 "combined_lower_limb_signed_power_w": 45.0,
+                "exo_lower_limb_abs_power_w": 30.0,
+                "exo_lower_limb_signed_power_w": 6.0,
                 "exo_knee_abs_power_w": 20.0,
                 "exo_knee_signed_power_w": 5.0,
                 "fallen_env0": 0,
@@ -185,5 +189,6 @@ def test_assist_power_summary_prefers_metabolic_fields(tmp_path) -> None:
 
     assert summary.human_knee_abs_power_mean_w == 300.0
     assert summary.human_knee_signed_power_mean_w == 40.0
+    assert summary.exo_knee_abs_power_mean_w == 30.0
     assert summary.human_lower_limb_mechanical_abs_power_mean_w == 100.0
     assert summary.human_lower_limb_metabolic_proxy_mean_w == 300.0

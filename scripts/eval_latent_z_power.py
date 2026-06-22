@@ -17,6 +17,9 @@ from hit_exo_humenv.mjlab.walking_env_cfg import (
     TASK_ID,
     TRAIN_WALKING_DIRECTION_CHOICES_DEG,
     TRAIN_WALKING_SPEED_CHOICES,
+    exo_joint_group,
+    exo_joint_names,
+    exo_torque_limits,
 )
 from mjlab.envs import ManagerBasedRlEnv
 from mjlab.rl import MjlabOnPolicyRunner, RslRlVecEnvWrapper
@@ -52,6 +55,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--human-action-repeat", type=int, default=cfg_path("human_s1", "action_repeat"))
     parser.add_argument("--human-action-smoothing", type=float, default=cfg_path("human_s1", "action_smoothing"))
     parser.add_argument("--human-root-height", type=float, default=cfg_path("human_s1", "root_height"))
+    parser.add_argument("--exo-joint-group", choices=("knee", "hip", "ankle", "hip_knee", "knee_ankle", "lower_limb"), default=exo_joint_group())
     return parser.parse_args()
 
 
@@ -159,6 +163,7 @@ def _row_from_tensors(
     lower_human_power = lower_torque * lower_vel
     lower_total_actuator_power = lower_total_actuator_torque * lower_vel
     lower_combined_power = (lower_torque + lower_exo_torque) * lower_vel
+    lower_exo_power = lower_exo_torque * lower_vel
     knee_human_power = knee_torque * knee_vel
     knee_total_actuator_power = knee_total_actuator_torque * knee_vel
     knee_exo_power = knee_exo_torque * knee_vel
@@ -207,6 +212,8 @@ def _row_from_tensors(
         "human_lower_limb_total_actuator_metabolic_power_w": float(
             lower_total_actuator_metabolic_power.detach().cpu()
         ),
+        "exo_lower_limb_abs_power_w": float(torch.sum(torch.abs(lower_exo_power)).detach().cpu()),
+        "exo_lower_limb_signed_power_w": float(torch.sum(lower_exo_power).detach().cpu()),
         "combined_lower_limb_abs_power_w": float(torch.sum(torch.abs(lower_combined_power)).detach().cpu()),
         "combined_lower_limb_signed_power_w": float(torch.sum(lower_combined_power).detach().cpu()),
         "human_knee_abs_power_w": float(torch.sum(torch.abs(knee_human_power)).detach().cpu()),
@@ -235,6 +242,8 @@ def main() -> None:
     env_cfg = load_env_cfg(TASK_ID, play=False)
     env_cfg.scene.num_envs = args.num_envs
     env_cfg.seed = args.seed
+    env_cfg.actions["knee_exo"].joint_names = exo_joint_names(args.exo_joint_group)
+    env_cfg.actions["knee_exo"].max_torque = exo_torque_limits(args.exo_joint_group)
     _configure_walk_command(env_cfg, args)
     _configure_human_gait(env_cfg, args)
     agent_cfg = load_rl_cfg(TASK_ID)
@@ -255,6 +264,10 @@ def main() -> None:
         device=raw_env.device,
     )
     knee_exo = raw_env.action_manager.get_term("knee_exo")
+    exo_joint_ids, exo_joint_names_used = robot.find_joints(knee_exo.joint_names, preserve_order=True)
+    exo_joint_ids = torch.as_tensor(exo_joint_ids, dtype=torch.long, device=raw_env.device)
+    lower_exo_positions = _positions_in_reference(lower_joint_ids, exo_joint_ids)
+    knee_exo_positions = _positions_in_reference(knee_joint_ids, exo_joint_ids)
 
     output_csv = _output_csv_path(args, checkpoint_file)
     output_csv.parent.mkdir(parents=True, exist_ok=True)
@@ -272,12 +285,14 @@ def main() -> None:
                 lower_vel = robot.data.joint_vel[:, lower_joint_ids]
                 knee_torque = mdp.actuator_joint_force_excluding_passive(raw_env, robot, knee_joint_ids)
                 knee_total_actuator_torque = robot.data.qfrc_actuator[:, knee_joint_ids]
-                knee_exo_torque = getattr(knee_exo, "_processed_actions", knee_exo.raw_action)
+                exo_torque = getattr(knee_exo, "_processed_actions", knee_exo.raw_action)
                 knee_vel = robot.data.joint_vel[:, knee_joint_ids]
                 lower_exo_torque = torch.zeros_like(lower_torque)
-                knee_positions = (len(hip_joint_ids), len(hip_joint_ids) + 1)
-                lower_exo_torque[:, knee_positions[0]] = knee_exo_torque[:, 0]
-                lower_exo_torque[:, knee_positions[1]] = knee_exo_torque[:, 1]
+                lower_exo_torque[:, lower_exo_positions] = exo_torque
+                knee_exo_torque = torch.zeros(raw_env.num_envs, len(knee_joint_ids), device=raw_env.device)
+                if knee_exo_positions:
+                    knee_columns = torch.as_tensor(knee_exo_positions, dtype=torch.long, device=raw_env.device)
+                    knee_exo_torque[:, knee_columns] = exo_torque[:, _matching_source_columns(exo_joint_ids, knee_joint_ids)]
                 time_s = step * raw_env.step_dt
                 total_fallen += int(fallen.detach().sum().cpu())
                 total_done += int(dones.detach().sum().cpu())
@@ -321,6 +336,8 @@ def main() -> None:
         "total_done": total_done,
         "knee_joint_names": list(knee_joint_names),
         "lower_limb_joint_names": [*hip_joint_names, *knee_joint_names, *ankle_joint_names],
+        "exo_joint_group": args.exo_joint_group,
+        "exo_joint_names": list(exo_joint_names_used),
         "positive_work_efficiency": POSITIVE_WORK_EFFICIENCY,
         "negative_work_efficiency": NEGATIVE_WORK_EFFICIENCY,
     }
@@ -328,6 +345,24 @@ def main() -> None:
     summary_path.write_text(json.dumps(summary, indent=2) + "\n")
     print(json.dumps(summary, indent=2))
     print(f"[INFO] Wrote latent-z power CSV: {output_csv}")
+
+
+def _positions_in_reference(reference_ids: torch.Tensor, query_ids: torch.Tensor) -> list[int]:
+    reference = [int(value) for value in reference_ids.detach().cpu().tolist()]
+    positions = []
+    for query in query_ids.detach().cpu().tolist():
+        if int(query) in reference:
+            positions.append(reference.index(int(query)))
+    return positions
+
+
+def _matching_source_columns(source_ids: torch.Tensor, query_ids: torch.Tensor) -> torch.Tensor:
+    source = [int(value) for value in source_ids.detach().cpu().tolist()]
+    columns = []
+    for query in query_ids.detach().cpu().tolist():
+        if int(query) in source:
+            columns.append(source.index(int(query)))
+    return torch.as_tensor(columns, dtype=torch.long, device=source_ids.device)
 
 
 if __name__ == "__main__":

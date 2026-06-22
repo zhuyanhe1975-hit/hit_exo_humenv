@@ -1,4 +1,9 @@
-from scripts.train_eval_sweep import Target, rank_rows, target_passed
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts.train_eval_sweep import Target, default_candidates, rank_rows, target_passed
 
 
 TARGET = Target(
@@ -54,3 +59,14 @@ def test_rank_rows_prefers_passing_then_more_saving_and_efficiency() -> None:
     assert ranked[0]["rank"] == 1
     assert ranked[0]["passed_target"] is True
     assert ranked[-1]["passed_target"] is False
+
+
+def test_assist_groups_preset_compares_joint_groups() -> None:
+    candidates = default_candidates("assist-groups")
+
+    assert [candidate.exo_joint_group for candidate in candidates] == [
+        "knee",
+        "hip",
+        "ankle",
+        "lower_limb",
+    ]

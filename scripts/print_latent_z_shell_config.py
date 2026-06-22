@@ -43,6 +43,7 @@ def main() -> None:
     emit("LATENT_Z_HUMAN_ACTION_REPEAT", cfg["human_s1"]["action_repeat"])
     emit("LATENT_Z_HUMAN_ACTION_SMOOTHING", cfg["human_s1"]["action_smoothing"])
     emit("LATENT_Z_HUMAN_ROOT_HEIGHT", cfg["human_s1"]["root_height"])
+    emit("LATENT_Z_EXO_JOINT_GROUP", cfg["exo"]["joint_group"])
 
 
 if __name__ == "__main__":

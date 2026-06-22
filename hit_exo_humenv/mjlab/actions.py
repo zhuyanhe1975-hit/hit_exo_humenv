@@ -348,10 +348,10 @@ def _load_resampled_mocap_state(path: str, episode: str, target_dt: float) -> tu
 
 @dataclass(kw_only=True)
 class KneeExoTorqueActionCfg(ActionTermCfg):
-    """Apply normalized bilateral exoskeleton torques to knee DoFs via qfrc_applied."""
+    """Apply normalized exoskeleton torques to configured DoFs via qfrc_applied."""
 
-    joint_names: tuple[str, str] = ("L_Knee_x", "R_Knee_x")
-    max_torque: float = 80.0
+    joint_names: tuple[str, ...] = ("L_Knee_x", "R_Knee_x")
+    max_torque: float | tuple[float, ...] = 80.0
 
     def build(self, env):
         return KneeExoTorqueAction(self, env)
@@ -365,19 +365,34 @@ class KneeExoTorqueAction(ActionTerm):
         joint_ids, joint_names = self._entity.find_joints(cfg.joint_names, preserve_order=True)
         self._joint_names = tuple(joint_names)
         self._dof_ids = self._entity.data.indexing.joint_v_adr[joint_ids].long()
-        self._raw_actions = torch.zeros(self.num_envs, 2, device=self.device)
+        self._raw_actions = torch.zeros(self.num_envs, len(self._joint_names), device=self.device)
         self._processed_actions = torch.zeros_like(self._raw_actions)
+        max_torque = cfg.max_torque
+        if isinstance(max_torque, tuple):
+            if len(max_torque) != len(self._joint_names):
+                raise ValueError(
+                    "max_torque tuple length must match joint_names: "
+                    f"{len(max_torque)} != {len(self._joint_names)}"
+                )
+            self._max_torque = torch.as_tensor(max_torque, dtype=torch.float32, device=self.device)
+        else:
+            self._max_torque = torch.full(
+                (len(self._joint_names),),
+                float(max_torque),
+                dtype=torch.float32,
+                device=self.device,
+            )
 
     @property
     def action_dim(self) -> int:
-        return 2
+        return self._raw_actions.shape[1]
 
     @property
     def raw_action(self) -> torch.Tensor:
         return self._raw_actions
 
     @property
-    def joint_names(self) -> tuple[str, str]:
+    def joint_names(self) -> tuple[str, ...]:
         return self._joint_names
 
     @property
@@ -386,7 +401,7 @@ class KneeExoTorqueAction(ActionTerm):
 
     def process_actions(self, actions: torch.Tensor) -> None:
         self._raw_actions[:] = torch.clamp(actions, -1.0, 1.0)
-        self._processed_actions[:] = self._raw_actions * self.cfg.max_torque
+        self._processed_actions[:] = self._raw_actions * self._max_torque
 
     def apply_actions(self) -> None:
         self._env.sim.data.qfrc_applied[:, self._dof_ids] = self._processed_actions

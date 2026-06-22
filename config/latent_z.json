@@ -30,7 +30,10 @@
     "candidate_speeds": [0.5, 0.75, 1.0, 1.25, 1.5]
   },
   "exo": {
-    "max_knee_torque": 25.0
+    "joint_group": "knee",
+    "max_knee_torque": 25.0,
+    "max_hip_torque": 25.0,
+    "max_ankle_torque": 25.0
   },
   "metabolic": {
     "positive_work_efficiency": 0.25,

@@ -23,7 +23,12 @@ from hit_exo_humenv.mjlab.mdp import (
     lower_limb_joint_velocity_delta_l2,
 )
 from hit_exo_humenv.latent_z_config import cfg_path
-from hit_exo_humenv.mjlab.walking_env_cfg import humenv_knee_exo_walking_env_cfg, humenv_knee_exo_walking_ppo_cfg
+from hit_exo_humenv.mjlab.walking_env_cfg import (
+    exo_joint_names,
+    exo_torque_limits,
+    humenv_knee_exo_walking_env_cfg,
+    humenv_knee_exo_walking_ppo_cfg,
+)
 from mjlab.utils.lab_api.math import quat_apply, quat_from_angle_axis, quat_mul
 from run_mjlab_knee_exo_viewer import _configure_walk_command, parse_args as parse_viewer_args
 
@@ -216,7 +221,11 @@ def test_latent_z_walking_uses_latest_exo_reward_terms() -> None:
     assert "walk_speed" in env_cfg.commands
     assert env_cfg.actions["human_s1"].speed_command_name == "walk_speed"
     assert env_cfg.actions["human_s1"].tracking_motion_file is None
-    assert env_cfg.actions["knee_exo"].max_torque == cfg_path("exo", "max_knee_torque")
+    assert env_cfg.actions["knee_exo"].joint_names == ("L_Knee_x", "R_Knee_x")
+    assert env_cfg.actions["knee_exo"].max_torque == (
+        cfg_path("exo", "max_knee_torque"),
+        cfg_path("exo", "max_knee_torque"),
+    )
     assert set(env_cfg.rewards) == {
         "not_fallen_progress",
         "fallen_penalty",
@@ -241,6 +250,22 @@ def test_latent_z_walking_uses_latest_exo_reward_terms() -> None:
     assert smooth_params["hip_weight"] == smoothness_weights["hip"]
     assert smooth_params["knee_weight"] == smoothness_weights["knee"]
     assert smooth_params["ankle_weight"] == smoothness_weights["ankle"]
+
+
+def test_latent_z_exo_joint_group_can_expand_to_lower_limb(monkeypatch) -> None:
+    monkeypatch.setenv("EXO_JOINT_GROUP", "lower_limb")
+    env_cfg = humenv_knee_exo_walking_env_cfg(play=False)
+
+    assert exo_joint_names() == (
+        "L_Hip_x",
+        "R_Hip_x",
+        "L_Knee_x",
+        "R_Knee_x",
+        "L_Ankle_x",
+        "R_Ankle_x",
+    )
+    assert env_cfg.actions["knee_exo"].joint_names == exo_joint_names()
+    assert env_cfg.actions["knee_exo"].max_torque == exo_torque_limits()
 
 
 def test_cached_lower_limb_power_cost_matches_reference_function() -> None:

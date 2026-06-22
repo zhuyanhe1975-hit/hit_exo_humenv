@@ -16,6 +16,9 @@ from hit_exo_humenv.mjlab.walking_env_cfg import (
     TASK_ID,
     TRAIN_WALKING_DIRECTION_CHOICES_DEG,
     TRAIN_WALKING_SPEED_CHOICES,
+    exo_joint_group,
+    exo_joint_names,
+    exo_torque_limits,
 )
 from mjlab.envs import ManagerBasedRlEnv
 from mjlab.rl import MjlabOnPolicyRunner, RslRlVecEnvWrapper
@@ -162,6 +165,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--human-action-repeat", type=int, default=cfg_path("human_s1", "action_repeat"))
     parser.add_argument("--human-action-smoothing", type=float, default=cfg_path("human_s1", "action_smoothing"))
     parser.add_argument("--human-root-height", type=float, default=cfg_path("human_s1", "root_height"))
+    parser.add_argument("--exo-joint-group", choices=("knee", "hip", "ankle", "hip_knee", "knee_ankle", "lower_limb"), default=exo_joint_group())
     parser.add_argument("--log-file", type=Path, default=None)
     parser.add_argument("--output-root", type=Path, default=DEFAULT_OUTPUT_ROOT)
     return parser.parse_args()
@@ -229,6 +233,8 @@ def main() -> None:
     env_cfg = load_env_cfg(TASK_ID, play=False)
     env_cfg.scene.num_envs = args.num_envs
     env_cfg.scene.env_spacing = args.env_spacing
+    env_cfg.actions["knee_exo"].joint_names = exo_joint_names(args.exo_joint_group)
+    env_cfg.actions["knee_exo"].max_torque = exo_torque_limits(args.exo_joint_group)
     _configure_walk_command(env_cfg, args)
     _configure_human_gait(env_cfg, args)
     agent_cfg = load_rl_cfg(TASK_ID)

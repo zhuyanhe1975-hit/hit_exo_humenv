@@ -72,12 +72,12 @@ def main() -> None:
 |---|---:|---:|---:|
 | 人体下肢代谢功率 proxy（髋+膝+踝） | {_fmt(before_metabolic, ' W')} | {_fmt(after_metabolic, ' W')} | {_fmt(comparison['human_abs_power_saved_w'], ' W')} saved / {_fmt(saved, '%')} |
 | 人体下肢机械绝对功率（髋+膝+踝） | {_fmt(before_mechanical, ' W')} | {_fmt(after_mechanical, ' W')} | {_fmt(mechanical_change, '%')} |
-| 外骨骼双膝绝对功率 | {_fmt(before['exo_knee_abs_power_mean_w'], ' W')} | {_fmt(after['exo_knee_abs_power_mean_w'], ' W')} | - |
+| 外骨骼助力关节绝对功率 | {_fmt(before['exo_knee_abs_power_mean_w'], ' W')} | {_fmt(after['exo_knee_abs_power_mean_w'], ' W')} | - |
 | 人机分开计总功率（代谢 proxy + 外骨骼机械） | {_fmt(before_metabolic, ' W')} | {_fmt(float(after_metabolic) + float(after['exo_knee_abs_power_mean_w']) if after_metabolic is not None else None, ' W')} | {_fmt(comparison['net_system_input_power_change_percent'], '%')} |
 | 人机合计下肢绝对功率 | {_fmt(before['combined_knee_abs_power_mean_w'], ' W')} | {_fmt(after['combined_knee_abs_power_mean_w'], ' W')} | {_fmt(comparison['combined_abs_power_change_percent'], '%')} |
 
 助力效率：**{_fmt(roi, '', 3)} W/W**  
-含义：每 1 W 外骨骼双膝绝对机械输出，节省多少 W 人体下肢（髋+膝+踝）代谢功率 proxy。
+含义：每 1 W 外骨骼助力关节绝对机械输出，节省多少 W 人体下肢（髋+膝+踝）代谢功率 proxy。
 
 代谢 proxy：先抵消 XML passive joint forces（仿真稳定用关节刚度/阻尼），再计算正机械功率 / 0.25 + 负机械功率幅值 / 1.20。
 

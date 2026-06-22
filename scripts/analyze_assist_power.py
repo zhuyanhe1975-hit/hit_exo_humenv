@@ -27,8 +27,6 @@ METABOLIC_POWER_COLUMNS = (
     "human_lower_limb_metabolic_power_w",
     "human_lower_limb_positive_power_w",
     "human_lower_limb_negative_power_w",
-    "exo_knee_abs_power_w",
-    "exo_knee_signed_power_w",
     "combined_lower_limb_abs_power_w",
     "combined_lower_limb_signed_power_w",
 )
@@ -289,8 +287,8 @@ def _row_with_power(raw: dict[str, str], path: Path) -> dict[str, float]:
                 "human_lower_limb_negative_power_w",
                 path,
             ),
-            "exo_knee_abs_power_w": _float(raw["exo_knee_abs_power_w"], "exo_knee_abs_power_w", path),
-            "exo_knee_signed_power_w": _float(raw["exo_knee_signed_power_w"], "exo_knee_signed_power_w", path),
+            "exo_knee_abs_power_w": _exo_power_value(raw, path, signed=False),
+            "exo_knee_signed_power_w": _exo_power_value(raw, path, signed=True),
             "combined_knee_abs_power_w": _float(
                 raw["combined_lower_limb_abs_power_w"],
                 "combined_lower_limb_abs_power_w",
@@ -316,8 +314,8 @@ def _row_with_power(raw: dict[str, str], path: Path) -> dict[str, float]:
         row = {
             "human_knee_abs_power_w": _float(raw["human_lower_limb_abs_power_w"], "human_lower_limb_abs_power_w", path),
             "human_knee_signed_power_w": _float(raw["human_lower_limb_signed_power_w"], "human_lower_limb_signed_power_w", path),
-            "exo_knee_abs_power_w": _float(raw["exo_knee_abs_power_w"], "exo_knee_abs_power_w", path),
-            "exo_knee_signed_power_w": _float(raw["exo_knee_signed_power_w"], "exo_knee_signed_power_w", path),
+            "exo_knee_abs_power_w": _exo_power_value(raw, path, signed=False),
+            "exo_knee_signed_power_w": _exo_power_value(raw, path, signed=True),
             "combined_knee_abs_power_w": _float(raw["combined_lower_limb_abs_power_w"], "combined_lower_limb_abs_power_w", path),
             "combined_knee_signed_power_w": _float(raw["combined_lower_limb_signed_power_w"], "combined_lower_limb_signed_power_w", path),
             "human_lower_limb_mechanical_abs_power_w": _float(
@@ -368,6 +366,13 @@ def _compute_power_columns(raw: dict[str, str], path: Path) -> dict[str, float]:
         "combined_knee_abs_power_w": abs(combined[0]) + abs(combined[1]),
         "combined_knee_signed_power_w": combined[0] + combined[1],
     }
+
+
+def _exo_power_value(raw: dict[str, str], path: Path, *, signed: bool) -> float:
+    lower_key = "exo_lower_limb_signed_power_w" if signed else "exo_lower_limb_abs_power_w"
+    legacy_key = "exo_knee_signed_power_w" if signed else "exo_knee_abs_power_w"
+    key = lower_key if _has_value(raw, lower_key) else legacy_key
+    return _float(raw[key], key, path)
 
 
 def _infer_dt(rows: list[dict[str, float]]) -> float | None:

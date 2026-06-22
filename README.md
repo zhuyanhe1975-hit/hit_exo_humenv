@@ -69,7 +69,7 @@ pip install -e /home/yhzhu/myWorks_vips/hit_exo_humenv
 - `mujoco-warp==3.8.1`
 - `rsl-rl-lib==5.2.0`
 
-## 训练平地多速度膝助力
+## 训练平地多速度助力
 
 ```bash
 ./train_latent_z.sh
@@ -87,7 +87,8 @@ Mjlab-HumEnv-KneeExo-Walking
 - 速度来自 `config/latent_z.json` 中的 `walking_command.speed_choices`。
 - 目前方向只有 `0.0 deg`，即前向行走。
 - S-1 根据速度选择对应 latent，例如 `move-ego-0-1.25`。
-- 外骨骼策略只输出左右膝两个助力动作。
+- 默认外骨骼策略输出左右膝两个助力动作。
+- 可以用 `EXO_JOINT_GROUP` 扩展助力关节组。
 
 默认训练配置：
 
@@ -95,6 +96,23 @@ Mjlab-HumEnv-KneeExo-Walking
 - 控制频率：约 `30 Hz`
 - MuJoCo 子步：`3`
 - 最大膝助力力矩：`25 Nm`
+
+助力关节组：
+
+| `EXO_JOINT_GROUP` | 动作维度 | 助力关节 |
+| --- | ---: | --- |
+| `knee` | 2 | `L_Knee_x`, `R_Knee_x` |
+| `hip` | 2 | `L_Hip_x`, `R_Hip_x` |
+| `ankle` | 2 | `L_Ankle_x`, `R_Ankle_x` |
+| `hip_knee` | 4 | 双侧髋 + 双侧膝 |
+| `knee_ankle` | 4 | 双侧膝 + 双侧踝 |
+| `lower_limb` | 6 | 双侧髋 + 双侧膝 + 双侧踝 |
+
+训练髋/膝/踝下肢助力：
+
+```bash
+EXO_JOINT_GROUP=lower_limb ./train_latent_z.sh
+```
 
 小规模调试训练示例：
 
@@ -153,6 +171,12 @@ logs/eval/latent_z_power/<时间戳>_headless_compare/
 
 ```bash
 ./train_eval_sweep.sh --dry-run
+```
+
+对比只膝、只髋、只踝、髋膝踝联合助力：
+
+```bash
+./train_eval_sweep.sh --preset assist-groups --max-iterations 150
 ```
 
 默认达标条件：

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import mujoco
@@ -39,6 +40,42 @@ NORMAL_WALKING_SPEED = cfg_path("walking_command", "normal_speed")
 TRAIN_WALKING_SPEED_RANGE = cfg_tuple("walking_command", "speed_range")
 TRAIN_WALKING_SPEED_CHOICES = cfg_tuple("walking_command", "speed_choices")
 TRAIN_WALKING_DIRECTION_CHOICES_DEG = cfg_tuple("walking_command", "direction_choices_deg")
+EXO_JOINT_GROUPS: dict[str, tuple[str, ...]] = {
+    "knee": ("L_Knee_x", "R_Knee_x"),
+    "hip": ("L_Hip_x", "R_Hip_x"),
+    "ankle": ("L_Ankle_x", "R_Ankle_x"),
+    "hip_knee": ("L_Hip_x", "R_Hip_x", "L_Knee_x", "R_Knee_x"),
+    "knee_ankle": ("L_Knee_x", "R_Knee_x", "L_Ankle_x", "R_Ankle_x"),
+    "lower_limb": ("L_Hip_x", "R_Hip_x", "L_Knee_x", "R_Knee_x", "L_Ankle_x", "R_Ankle_x"),
+}
+
+
+def exo_joint_group() -> str:
+    group = os.environ.get("EXO_JOINT_GROUP", cfg_path("exo", "joint_group"))
+    if group not in EXO_JOINT_GROUPS:
+        supported = ", ".join(sorted(EXO_JOINT_GROUPS))
+        raise ValueError(f"Unsupported EXO_JOINT_GROUP={group!r}. Supported groups: {supported}")
+    return group
+
+
+def exo_joint_names(group: str | None = None) -> tuple[str, ...]:
+    return EXO_JOINT_GROUPS[group or exo_joint_group()]
+
+
+def exo_torque_limits(group: str | None = None) -> tuple[float, ...]:
+    limits = {
+        "Hip": float(cfg_path("exo", "max_hip_torque")),
+        "Knee": float(cfg_path("exo", "max_knee_torque")),
+        "Ankle": float(cfg_path("exo", "max_ankle_torque")),
+    }
+    return tuple(limits[_joint_family(name)] for name in exo_joint_names(group))
+
+
+def _joint_family(joint_name: str) -> str:
+    for family in ("Hip", "Knee", "Ankle"):
+        if family in joint_name:
+            return family
+    raise ValueError(f"Unsupported exoskeleton joint name: {joint_name}")
 
 
 def _humenv_spec() -> mujoco.MjSpec:
@@ -107,7 +144,8 @@ def humenv_knee_exo_walking_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
         ),
         "knee_exo": KneeExoTorqueActionCfg(
             entity_name="robot",
-            max_torque=cfg_path("exo", "max_knee_torque"),
+            joint_names=exo_joint_names(),
+            max_torque=exo_torque_limits(),
         ),
     }
 
