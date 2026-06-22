@@ -1,0 +1,79 @@
+{
+  "task_id": "Mjlab-HumEnv-KneeExo-Walking",
+  "environment": {
+    "conda_env": "mjwarp_env",
+    "humenv_xml": "/home/yhzhu/AI/humenv/humenv/assets/robot.xml"
+  },
+  "paths": {
+    "checkpoint_root": "logs/rsl_rl/humenv_knee_exo_walking",
+    "latent_z_power_output_root": "logs/eval/latent_z_power",
+    "latent_z_power_runs_root": "logs/eval/latent_z_power/runs",
+    "viewer_power_log_root": "logs/run/knee_pd_torque",
+    "legacy_eval_root": "logs/eval/humenv_knee_exo_walking",
+    "s1_latent_selection_root": "logs/s1_latent_selection"
+  },
+  "walking_command": {
+    "normal_speed": 1.25,
+    "speed_range": [0.5, 1.5],
+    "speed_choices": [0.5, 0.75, 1.0, 1.25, 1.5],
+    "direction_choices_deg": [0.0],
+    "resampling_time_range": [1000000000.0, 1000000000.0],
+    "reset_on_resample": false
+  },
+  "human_s1": {
+    "num_samples_per_inference": 1000,
+    "max_workers": 2,
+    "latent_speed_scale": 1.0,
+    "action_repeat": 1,
+    "action_smoothing": 0.0,
+    "root_height": 0.94,
+    "candidate_speeds": [0.5, 0.75, 1.0, 1.25, 1.5]
+  },
+  "exo": {
+    "max_knee_torque": 25.0
+  },
+  "metabolic": {
+    "positive_work_efficiency": 0.25,
+    "negative_work_efficiency": 1.2
+  },
+  "reward": {
+    "not_fallen_progress_weight": 0.02,
+    "fallen_penalty_weight": -5.0,
+    "fall_min_height": 0.5,
+    "lower_limb_joint_power_weight": -0.001,
+    "lower_limb_joint_velocity_delta_weight": -0.02,
+    "power_joint_weights": {
+      "hip": 1.0,
+      "knee": 1.0,
+      "ankle": 1.0
+    },
+    "smoothness_joint_weights": {
+      "hip": 1.0,
+      "knee": 1.0,
+      "ankle": 3.0
+    }
+  },
+  "simulation": {
+    "mujoco_timestep": 0.011111111111111112,
+    "decimation": 3,
+    "env_spacing": 3.0
+  },
+  "train": {
+    "num_envs": 4096,
+    "num_steps_per_env": 16,
+    "max_iterations": 1000,
+    "save_interval": 50,
+    "logger": "tensorboard"
+  },
+  "eval": {
+    "num_envs": 64,
+    "steps": 300,
+    "seed": 0,
+    "drop_fallen": true,
+    "random_walk_speed": true,
+    "random_walk_direction": true
+  },
+  "viewer": {
+    "num_envs": 16
+  }
+}

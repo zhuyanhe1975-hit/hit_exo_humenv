@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hit-exo-humenv"
+version = "0.1.0"
+description = "HumEnv + mjlab scaffolding for abstract knee-assist exoskeleton walking RL."
+requires-python = ">=3.10"
+dependencies = [
+    "gymnasium>=0.26",
+    "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+mjlab = [
+    "mjlab",
+]
+dev = [
+    "pytest>=8",
+]
+
+[project.entry-points."mjlab.tasks"]
+hit_exo_humenv = "hit_exo_humenv.mjlab"
+
+[tool.setuptools.packages.find]
+include = ["hit_exo_humenv*"]
+
+[tool.ruff]
+line-length = 100

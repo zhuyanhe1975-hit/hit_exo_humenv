@@ -1,0 +1,13 @@
+"""Gymnasium/HumEnv environments."""
+
+from hit_exo_humenv.envs.humenv_knee_exo import (
+    ExoKneeWalkingConfig,
+    HumEnvKneeExoWalkingEnv,
+    make_humenv_knee_exo_walking_env,
+)
+
+__all__ = [
+    "ExoKneeWalkingConfig",
+    "HumEnvKneeExoWalkingEnv",
+    "make_humenv_knee_exo_walking_env",
+]
